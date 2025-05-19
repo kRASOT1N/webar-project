@@ -79,16 +79,23 @@ class WebARApp {
         setInterval(() => {
             this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
             const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
-            
+            let code = null;
+            try {
+                code = jsQR(imageData.data, imageData.width, imageData.height);
+            } catch (e) {
+                this.message.textContent = 'Ошибка jsQR: ' + e.message;
+                return;
+            }
             if (code) {
                 this.qrPosition = {
                     x: code.location.topLeftCorner.x,
                     y: code.location.topLeftCorner.y
                 };
+                this.message.textContent = 'QR-код найден: ' + code.data;
                 this.handleQRCode(code.data);
             } else {
                 this.qrPosition = null;
+                this.message.textContent = 'QR-код не найден';
             }
         }, 100);
     }
@@ -102,7 +109,9 @@ class WebARApp {
                 this.models.set(data, model);
                 // Создаем кнопки под моделью
                 this.createButtons(model);
+                this.message.textContent = 'Модель успешно загружена';
             } catch (error) {
+                this.message.textContent = 'Ошибка загрузки модели: ' + error.message;
                 console.error('Ошибка загрузки модели:', error);
                 return;
             }
