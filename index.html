@@ -13,7 +13,11 @@
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
 <body>
-    <div id="loading">Загрузка камеры...</div>
+    <div id="loading">
+        Загрузка камеры...<br>
+        <span style="font-size: 16px; display: block; margin-top: 10px;">Нажмите "Разрешить" в запросе на доступ к камере!</span>
+        <button id="startCamera" style="margin-top: 20px;">Запустить камеру</button>
+    </div>
     <div id="message">Наведи на QR</div>
     <div id="info">Для лучшего восприятия убедитесь, что телефон в режиме портретной ориентации</div>
     <video id="video" playsinline autoplay muted></video>

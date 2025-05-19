@@ -10,6 +10,7 @@ class WebARApp {
         this.message = document.getElementById('message');
         this.controls = document.getElementById('controls');
         this.info = document.getElementById('info');
+        this.startCameraButton = document.getElementById('startCamera');
         
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -52,37 +53,58 @@ class WebARApp {
     }
     
     async init() {
+        // Добавляем обработчик для кнопки запуска камеры
+        this.startCameraButton.addEventListener('click', () => {
+            this.initCamera();
+        });
+        
+        // Инициализируем ресурсы, не связанные с камерой
+        this.addInitialDebugObject();
+        this.setupEventListeners();
+        this.animate();
+        
+        // Show WebGL info
+        const gl = this.renderer.getContext();
+        this.debugElement.textContent = `WebGL: ${gl.getParameter(gl.VERSION)}`;
+        
+        console.log('Инициализация завершена, ожидаем запуска камеры');
+    }
+    
+    async initCamera() {
         try {
+            console.log('Запрашиваем доступ к камере...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment' }
             });
+            
+            console.log('Доступ к камере получен!');
             this.video.srcObject = stream;
             this.video.onloadedmetadata = () => {
                 this.canvas.width = this.video.videoWidth;
                 this.canvas.height = this.video.videoHeight;
             };
+            
             await this.video.play();
             this.canvas.width = this.video.videoWidth || 640;
             this.canvas.height = this.video.videoHeight || 480;
             
             this.loading.style.display = 'none';
             this.message.textContent = 'Наведи на QR';
-            
-            // Add debug objects immediately to check if Three.js is working
-            this.addInitialDebugObject();
-            
             this.startQRDetection();
-            this.animate();
-            this.setupEventListeners();
             
-            // Show WebGL info
-            const gl = this.renderer.getContext();
-            this.debugElement.textContent = `WebGL: ${gl.getParameter(gl.VERSION)}`;
-            
-            console.log('Инициализация завершена успешно');
+            console.log('Камера запущена, можно сканировать QR-коды');
         } catch (error) {
-            this.message.textContent = 'Ошибка доступа к камере: ' + error.message;
             console.error('Ошибка при инициализации камеры:', error);
+            this.message.textContent = 'Ошибка доступа к камере: ' + error.message;
+            this.loading.innerHTML = `
+                <div style="color: red; font-weight: bold;">Ошибка доступа к камере!</div>
+                <div style="margin-top: 10px;">${error.message}</div>
+                <button id="retryCamera" style="margin-top: 20px;">Попробовать снова</button>
+            `;
+            
+            document.getElementById('retryCamera').addEventListener('click', () => {
+                this.initCamera();
+            });
         }
     }
     
