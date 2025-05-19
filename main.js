@@ -122,11 +122,12 @@ class WebARApp {
         const modelId = 'model';
         try {
             const loader = new THREE.GLTFLoader();
+            console.log('Пытаюсь загрузить модель:', `models/${modelId}.glb`);
             loader.load(
                 `models/${modelId}.glb`,
                 (gltf) => {
                     const model = gltf.scene;
-                    model.scale.set(0.1, 0.1, 0.1);
+                    model.scale.set(1, 1, 1); // увеличиваем масштаб для теста
                     // Позиционируем модель по центру QR
                     const worldPosition = new THREE.Vector3(
                         (qrCenter.x / this.canvas.width) * 2 - 1,
@@ -140,15 +141,18 @@ class WebARApp {
                     this.scene.add(model);
                     this.models.push(model);
                     this.modelPositions.push(qrCenter);
-                    this.message.textContent = '';
+                    this.message.textContent = 'Модель добавлена';
+                    console.log('Модель успешно добавлена в сцену');
                 },
                 undefined,
                 (error) => {
                     this.message.textContent = 'Ошибка загрузки модели: ' + error.message;
+                    console.error('Ошибка загрузки модели:', error);
                 }
             );
         } catch (error) {
             this.message.textContent = 'Ошибка загрузки модели: ' + error.message;
+            console.error('Ошибка загрузки модели:', error);
         }
     }
     
