@@ -13,8 +13,10 @@ class WebARApp {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(this.renderer.domElement);
         
-        this.models = new Map();
-        this.activeModel = null;
+        this.models = [];
+        this.modelPositions = [];
+        this.modelIdCounter = 0;
+        this.lastQR = null;
         this.longPressTimer = null;
         this.isDragging = false;
         this.qrCenter = null;
@@ -62,7 +64,7 @@ class WebARApp {
         // Открепление модели долгим нажатием
         this.renderer.domElement.addEventListener('touchstart', (e) => {
             this.longPressTimer = setTimeout(() => {
-                if (this.activeModel && !this.modelDetached) {
+                if (this.models.length > 0 && !this.modelDetached) {
                     this.modelDetached = true;
                     this.message.textContent = 'Модель откреплена';
                 }
@@ -74,8 +76,8 @@ class WebARApp {
         });
         
         // Кнопки вращения
-        document.getElementById('rotateLeft').addEventListener('click', () => this.rotateModel(-Math.PI / 4));
-        document.getElementById('rotateRight').addEventListener('click', () => this.rotateModel(Math.PI / 4));
+        document.getElementById('rotateLeft').addEventListener('click', () => this.rotateActiveModel(-Math.PI / 4));
+        document.getElementById('rotateRight').addEventListener('click', () => this.rotateActiveModel(Math.PI / 4));
         
         // Обработка изменения размера окна
         window.addEventListener('resize', () => {
@@ -103,141 +105,62 @@ class WebARApp {
             }
             if (code) {
                 // Центр QR
-                this.qrCenter = {
+                const qrCenter = {
                     x: (code.location.topLeftCorner.x + code.location.topRightCorner.x + code.location.bottomLeftCorner.x + code.location.bottomRightCorner.x) / 4,
                     y: (code.location.topLeftCorner.y + code.location.topRightCorner.y + code.location.bottomLeftCorner.y + code.location.bottomRightCorner.y) / 4
                 };
-                this.qrVisibleFrames++;
-                this.qrLostFrames = 0;
-                if (!this.activeModel && this.qrVisibleFrames >= this.qrStableThreshold && !this.modelDetached) {
-                    this.loadAndShowModel();
-                }
-            } else {
-                this.qrCenter = null;
-                this.qrLostFrames++;
-                if (this.qrLostFrames >= this.qrLostThreshold && this.activeModel && !this.modelDetached) {
-                    this.scene.remove(this.activeModel);
-                    this.activeModel = null;
-                    this.controls.style.display = 'none';
+                // Проверяем, не добавляли ли мы уже модель на этот QR (по содержимому)
+                if (this.lastQR !== code.data) {
+                    this.lastQR = code.data;
+                    this.addModelAt(qrCenter);
                 }
             }
         }, 250);
     }
     
-    async loadAndShowModel() {
+    async addModelAt(qrCenter) {
         const modelId = 'model';
-        if (!this.models.has(modelId)) {
-            try {
-                const model = await this.loadModel(modelId);
-                this.models.set(modelId, model);
-                this.createButtons(model);
-            } catch (error) {
-                this.message.textContent = 'Ошибка загрузки модели: ' + error.message;
-                return;
-            }
-        }
-        this.activeModel = this.models.get(modelId);
-        this.modelDetached = false;
-        this.scene.add(this.activeModel);
-        this.controls.style.display = 'flex';
-        this.message.textContent = '';
-    }
-    
-    async loadModel(modelId) {
-        const loader = new THREE.GLTFLoader();
-        return new Promise((resolve, reject) => {
+        try {
+            const loader = new THREE.GLTFLoader();
             loader.load(
                 `models/${modelId}.glb`,
                 (gltf) => {
                     const model = gltf.scene;
                     model.scale.set(0.1, 0.1, 0.1);
-                    resolve(model);
+                    // Позиционируем модель по центру QR
+                    const worldPosition = new THREE.Vector3(
+                        (qrCenter.x / this.canvas.width) * 2 - 1,
+                        -(qrCenter.y / this.canvas.height) * 2 + 1,
+                        -1
+                    );
+                    worldPosition.unproject(this.camera);
+                    model.position.copy(worldPosition);
+                    model.lookAt(this.camera.position);
+                    model.rotation.x = -Math.PI / 6;
+                    this.scene.add(model);
+                    this.models.push(model);
+                    this.modelPositions.push(qrCenter);
+                    this.message.textContent = '';
                 },
                 undefined,
-                reject
+                (error) => {
+                    this.message.textContent = 'Ошибка загрузки модели: ' + error.message;
+                }
             );
-        });
-    }
-    
-    rotateModel(angle) {
-        if (this.activeModel) {
-            this.activeModel.rotation.y += angle;
+        } catch (error) {
+            this.message.textContent = 'Ошибка загрузки модели: ' + error.message;
         }
     }
     
-    createButtons(model) {
-        // Создаем плоскость для кнопок
-        const buttonPlane = new THREE.Mesh(
-            new THREE.PlaneGeometry(1, 0.5),
-            new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8 })
-        );
-        
-        // Создаем текстуры для кнопок
-        const emailTexture = new THREE.TextureLoader().load('assets/em.png');
-        const siteTexture = new THREE.TextureLoader().load('assets/site.png');
-        
-        // Создаем материалы для кнопок
-        const emailMaterial = new THREE.MeshBasicMaterial({ map: emailTexture, transparent: true });
-        const siteMaterial = new THREE.MeshBasicMaterial({ map: siteTexture, transparent: true });
-        
-        // Создаем меши для кнопок
-        this.buttons.email = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4), emailMaterial);
-        this.buttons.site = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4), siteMaterial);
-        
-        // Позиционируем кнопки
-        this.buttons.email.position.set(-0.25, -0.3, 0);
-        this.buttons.site.position.set(0.25, -0.3, 0);
-        
-        // Добавляем кнопки к модели
-        model.add(this.buttons.email);
-        model.add(this.buttons.site);
-        
-        // Добавляем обработчики кликов
-        this.setupButtonInteractions();
-    }
-    
-    setupButtonInteractions() {
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-        
-        this.renderer.domElement.addEventListener('click', (event) => {
-            // Вычисляем позицию мыши в нормализованных координатах
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
-            // Обновляем рейкастер
-            raycaster.setFromCamera(mouse, this.camera);
-            
-            // Проверяем пересечения с кнопками
-            const intersects = raycaster.intersectObjects([this.buttons.email, this.buttons.site]);
-            
-            if (intersects.length > 0) {
-                const clickedButton = intersects[0].object;
-                if (clickedButton === this.buttons.email) {
-                    window.location.href = 'mailto:your@email.com';
-                } else if (clickedButton === this.buttons.site) {
-                    window.open('https://your-site.com', '_blank');
-                }
-            }
-        });
+    rotateActiveModel(angle) {
+        if (this.models.length > 0) {
+            // Вращаем последнюю добавленную модель
+            this.models[this.models.length - 1].rotation.y += angle;
+        }
     }
     
     animate() {
         requestAnimationFrame(() => this.animate());
-        
-        // Позиционируем модель по центру QR, если она не откреплена
-        if (this.activeModel && !this.modelDetached && this.qrCenter) {
-            const worldPosition = new THREE.Vector3(
-                (this.qrCenter.x / this.canvas.width) * 2 - 1,
-                -(this.qrCenter.y / this.canvas.height) * 2 + 1,
-                -1
-            );
-            worldPosition.unproject(this.camera);
-            this.activeModel.position.copy(worldPosition);
-            this.activeModel.lookAt(this.camera.position);
-            this.activeModel.rotation.x = -Math.PI / 6;
-        }
-        
         this.renderer.render(this.scene, this.camera);
     }
 }
