@@ -32,11 +32,15 @@ class WebARApp {
                 video: { facingMode: 'environment' }
             });
             this.video.srcObject = stream;
+            // Ждем, пока видео получит размеры
+            this.video.onloadedmetadata = () => {
+                this.canvas.width = this.video.videoWidth;
+                this.canvas.height = this.video.videoHeight;
+            };
             await this.video.play();
-            
-            this.canvas.width = this.video.videoWidth;
-            this.canvas.height = this.video.videoHeight;
-            
+            // На всякий случай задаем размеры canvas
+            this.canvas.width = this.video.videoWidth || 640;
+            this.canvas.height = this.video.videoHeight || 480;
             this.loading.style.display = 'none';
             this.startQRDetection();
             this.animate();
@@ -45,7 +49,7 @@ class WebARApp {
             this.setupEventListeners();
         } catch (error) {
             console.error('Ошибка при инициализации камеры:', error);
-            this.message.textContent = 'Ошибка доступа к камере';
+            this.message.textContent = 'Ошибка доступа к камере: ' + error.message;
         }
     }
     
@@ -77,6 +81,15 @@ class WebARApp {
     
     startQRDetection() {
         setInterval(() => {
+            // Проверяем размеры canvas
+            if (this.video.videoWidth === 0 || this.video.videoHeight === 0) {
+                this.message.textContent = 'Камера не готова';
+                return;
+            }
+            if (this.canvas.width !== this.video.videoWidth || this.canvas.height !== this.video.videoHeight) {
+                this.canvas.width = this.video.videoWidth;
+                this.canvas.height = this.video.videoHeight;
+            }
             this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
             const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             let code = null;
@@ -97,7 +110,7 @@ class WebARApp {
                 this.qrPosition = null;
                 this.message.textContent = 'QR-код не найден';
             }
-        }, 100);
+        }, 200);
     }
     
     async handleQRCode(data) {
