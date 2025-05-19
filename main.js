@@ -9,6 +9,11 @@ class WebARApp {
         
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.set(0, 0, 2); // ближе к центру
+        this.camera.lookAt(0, 0, 0);
+        // Добавляем свет
+        const light = new THREE.AmbientLight(0xffffff, 1);
+        this.scene.add(light);
         this.renderer = new THREE.WebGLRenderer({ alpha: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(this.renderer.domElement);
