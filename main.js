@@ -17,7 +17,12 @@ class WebARApp {
         this.activeModel = null;
         this.longPressTimer = null;
         this.isDragging = false;
-        this.qrPosition = null;
+        this.qrCenter = null;
+        this.qrVisibleFrames = 0;
+        this.qrLostFrames = 0;
+        this.qrStableThreshold = 2; // сколько кадров подряд QR должен быть виден
+        this.qrLostThreshold = 2; // сколько кадров подряд QR должен быть не виден, чтобы убрать модель
+        this.modelDetached = false;
         this.buttons = {
             email: null,
             site: null
@@ -54,11 +59,12 @@ class WebARApp {
     }
     
     setupEventListeners() {
-        // Обработка долгого нажатия
+        // Открепление модели долгим нажатием
         this.renderer.domElement.addEventListener('touchstart', (e) => {
             this.longPressTimer = setTimeout(() => {
-                if (this.activeModel) {
-                    this.detachModel();
+                if (this.activeModel && !this.modelDetached) {
+                    this.modelDetached = true;
+                    this.message.textContent = 'Модель откреплена';
                 }
             }, 800);
         });
@@ -81,11 +87,7 @@ class WebARApp {
     
     startQRDetection() {
         setInterval(() => {
-            // Проверяем размеры canvas
-            if (this.video.videoWidth === 0 || this.video.videoHeight === 0) {
-                this.message.textContent = 'Камера не готова';
-                return;
-            }
+            if (this.video.videoWidth === 0 || this.video.videoHeight === 0) return;
             if (this.canvas.width !== this.video.videoWidth || this.canvas.height !== this.video.videoHeight) {
                 this.canvas.width = this.video.videoWidth;
                 this.canvas.height = this.video.videoHeight;
@@ -100,37 +102,45 @@ class WebARApp {
                 return;
             }
             if (code) {
-                this.qrPosition = {
-                    x: code.location.topLeftCorner.x,
-                    y: code.location.topLeftCorner.y
+                // Центр QR
+                this.qrCenter = {
+                    x: (code.location.topLeftCorner.x + code.location.topRightCorner.x + code.location.bottomLeftCorner.x + code.location.bottomRightCorner.x) / 4,
+                    y: (code.location.topLeftCorner.y + code.location.topRightCorner.y + code.location.bottomLeftCorner.y + code.location.bottomRightCorner.y) / 4
                 };
-                this.message.textContent = 'QR-код найден: ' + code.data;
-                this.handleQRCode(code.data);
+                this.qrVisibleFrames++;
+                this.qrLostFrames = 0;
+                if (!this.activeModel && this.qrVisibleFrames >= this.qrStableThreshold && !this.modelDetached) {
+                    this.loadAndShowModel();
+                }
             } else {
-                this.qrPosition = null;
-                this.message.textContent = 'QR-код не найден';
+                this.qrCenter = null;
+                this.qrLostFrames++;
+                if (this.qrLostFrames >= this.qrLostThreshold && this.activeModel && !this.modelDetached) {
+                    this.scene.remove(this.activeModel);
+                    this.activeModel = null;
+                    this.controls.style.display = 'none';
+                }
             }
-        }, 200);
+        }, 250);
     }
     
-    async handleQRCode(data) {
-        // Всегда используем одну и ту же модель
-        data = 'model';
-        if (!this.models.has(data)) {
+    async loadAndShowModel() {
+        const modelId = 'model';
+        if (!this.models.has(modelId)) {
             try {
-                const model = await this.loadModel(data);
-                this.models.set(data, model);
-                // Создаем кнопки под моделью
+                const model = await this.loadModel(modelId);
+                this.models.set(modelId, model);
                 this.createButtons(model);
-                this.message.textContent = 'Модель успешно загружена';
             } catch (error) {
                 this.message.textContent = 'Ошибка загрузки модели: ' + error.message;
-                console.error('Ошибка загрузки модели:', error);
                 return;
             }
         }
-        this.activeModel = this.models.get(data);
+        this.activeModel = this.models.get(modelId);
+        this.modelDetached = false;
+        this.scene.add(this.activeModel);
         this.controls.style.display = 'flex';
+        this.message.textContent = '';
     }
     
     async loadModel(modelId) {
@@ -141,21 +151,12 @@ class WebARApp {
                 (gltf) => {
                     const model = gltf.scene;
                     model.scale.set(0.1, 0.1, 0.1);
-                    this.scene.add(model);
                     resolve(model);
                 },
                 undefined,
                 reject
             );
         });
-    }
-    
-    detachModel() {
-        if (this.activeModel) {
-            this.activeModel.userData.detached = true;
-            this.activeModel = null;
-            this.controls.style.display = 'none';
-        }
     }
     
     rotateModel(angle) {
@@ -224,28 +225,17 @@ class WebARApp {
     animate() {
         requestAnimationFrame(() => this.animate());
         
-        // Обновление позиции активной модели
-        if (this.activeModel && !this.activeModel.userData.detached) {
-            if (this.qrPosition) {
-                // Преобразуем координаты QR-кода в мировые координаты
-                const worldPosition = new THREE.Vector3(
-                    (this.qrPosition.x / this.canvas.width) * 2 - 1,
-                    -(this.qrPosition.y / this.canvas.height) * 2 + 1,
-                    -1
-                );
-                
-                // Преобразуем в мировые координаты
-                worldPosition.unproject(this.camera);
-                
-                // Устанавливаем позицию модели
-                this.activeModel.position.copy(worldPosition);
-                
-                // Поворачиваем модель к камере
-                this.activeModel.lookAt(this.camera.position);
-                
-                // Наклоняем модель немного вверх
-                this.activeModel.rotation.x = -Math.PI / 6;
-            }
+        // Позиционируем модель по центру QR, если она не откреплена
+        if (this.activeModel && !this.modelDetached && this.qrCenter) {
+            const worldPosition = new THREE.Vector3(
+                (this.qrCenter.x / this.canvas.width) * 2 - 1,
+                -(this.qrCenter.y / this.canvas.height) * 2 + 1,
+                -1
+            );
+            worldPosition.unproject(this.camera);
+            this.activeModel.position.copy(worldPosition);
+            this.activeModel.lookAt(this.camera.position);
+            this.activeModel.rotation.x = -Math.PI / 6;
         }
         
         this.renderer.render(this.scene, this.camera);
