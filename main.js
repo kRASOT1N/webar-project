@@ -1,3 +1,6 @@
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/loaders/GLTFLoader.js';
+
 class WebARApp {
     constructor() {
         this.video = document.getElementById('video');
@@ -6,27 +9,40 @@ class WebARApp {
         this.loading = document.getElementById('loading');
         this.message = document.getElementById('message');
         this.controls = document.getElementById('controls');
+        this.info = document.getElementById('info');
         
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.set(0, 1.6, 3); // Позиция как если бы камера была на уровне глаз
-        this.camera.lookAt(0, 0, 0);
+        this.camera.position.set(0, 0, 3); // Simpler camera position
         
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+        // Stronger lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 3.0);
         this.scene.add(ambientLight);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
         directionalLight.position.set(1, 1, 1);
         this.scene.add(directionalLight);
         
         this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setClearColor(0x000000, 0); // прозрачный фон
+        this.renderer.setClearColor(0x000000, 0); // transparent background
         document.body.appendChild(this.renderer.domElement);
+        
+        // Debug indicator to show if WebGL is working
+        this.debugElement = document.createElement('div');
+        this.debugElement.style.position = 'fixed';
+        this.debugElement.style.bottom = '10px';
+        this.debugElement.style.left = '10px';
+        this.debugElement.style.color = 'green';
+        this.debugElement.style.zIndex = '1000';
+        this.debugElement.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        this.debugElement.style.padding = '5px';
+        document.body.appendChild(this.debugElement);
         
         this.models = [];
         this.qrDetected = false;
         this.lastProcessedQR = null;
+        this.objectsAdded = false;
         
         this.raycaster = new THREE.Raycaster();
         
@@ -52,29 +68,32 @@ class WebARApp {
             this.loading.style.display = 'none';
             this.message.textContent = 'Наведи на QR';
             
-            this.addDebugObjects();
+            // Add debug objects immediately to check if Three.js is working
+            this.addInitialDebugObject();
             
             this.startQRDetection();
             this.animate();
             this.setupEventListeners();
+            
+            // Show WebGL info
+            const gl = this.renderer.getContext();
+            this.debugElement.textContent = `WebGL: ${gl.getParameter(gl.VERSION)}`;
+            
+            console.log('Инициализация завершена успешно');
         } catch (error) {
             this.message.textContent = 'Ошибка доступа к камере: ' + error.message;
             console.error('Ошибка при инициализации камеры:', error);
         }
     }
     
-    addDebugObjects() {
-        const gridHelper = new THREE.GridHelper(10, 10, 0xff0000, 0xffffff);
-        gridHelper.position.set(0, -0.5, 0);
-        this.scene.add(gridHelper);
-        
-        const testCube = new THREE.Mesh(
-            new THREE.BoxGeometry(0.5, 0.5, 0.5),
-            new THREE.MeshStandardMaterial({ color: 0xff0000 })
-        );
-        testCube.position.set(0, 0, -2);
-        this.scene.add(testCube);
-        console.log('Тестовые объекты добавлены для отладки');
+    addInitialDebugObject() {
+        // Add a small green square in the bottom right corner to confirm rendering is working
+        const geometry = new THREE.PlaneGeometry(0.2, 0.2);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
+        const plane = new THREE.Mesh(geometry, material);
+        plane.position.set(0.8, -0.8, -1);
+        this.scene.add(plane);
+        console.log('Добавлен индикатор работы Three.js');
     }
     
     setupEventListeners() {
@@ -93,6 +112,24 @@ class WebARApp {
         document.getElementById('rotateRight').addEventListener('click', () => {
             if (this.models.length > 0) {
                 this.models[this.models.length - 1].rotation.y -= Math.PI / 4;
+            }
+        });
+        
+        // Add a manual trigger button for testing
+        const testButton = document.createElement('button');
+        testButton.textContent = 'Показать объекты';
+        testButton.style.position = 'fixed';
+        testButton.style.bottom = '70px';
+        testButton.style.left = '50%';
+        testButton.style.transform = 'translateX(-50%)';
+        testButton.style.zIndex = '1000';
+        testButton.style.padding = '10px 20px';
+        document.body.appendChild(testButton);
+        
+        testButton.addEventListener('click', () => {
+            if (!this.objectsAdded) {
+                this.addVisibleObjects();
+                this.objectsAdded = true;
             }
         });
     }
@@ -117,22 +154,18 @@ class WebARApp {
                 if (code) {
                     this.qrDetected = true;
                     
-                    const centerX = (code.location.topLeftCorner.x + 
-                                    code.location.topRightCorner.x + 
-                                    code.location.bottomLeftCorner.x + 
-                                    code.location.bottomRightCorner.x) / 4;
-                    
-                    const centerY = (code.location.topLeftCorner.y + 
-                                    code.location.topRightCorner.y + 
-                                    code.location.bottomLeftCorner.y + 
-                                    code.location.bottomRightCorner.y) / 4;
-                    
                     if (this.lastProcessedQR !== code.data) {
                         this.lastProcessedQR = code.data;
                         console.log('QR-код обнаружен:', code.data);
                         this.message.textContent = 'QR найден: ' + code.data;
                         
-                        this.placeModelAtScreenPosition(centerX, centerY);
+                        if (!this.objectsAdded) {
+                            this.addVisibleObjects();
+                            this.objectsAdded = true;
+                            
+                            // Show controls
+                            this.controls.style.display = 'flex';
+                        }
                     }
                 } else {
                     if (this.qrDetected) {
@@ -147,94 +180,88 @@ class WebARApp {
         }, 200);
     }
     
-    placeModelAtScreenPosition(screenX, screenY) {
-        console.log('Размещаем модель по координатам экрана:', screenX, screenY);
-        
-        const normalizedX = (screenX / this.canvas.width) * 2 - 1;
-        const normalizedY = -(screenY / this.canvas.height) * 2 + 1;
-        
-        console.log('Нормализованные координаты:', normalizedX, normalizedY);
-        
-        this.raycaster.setFromCamera(
-            new THREE.Vector2(normalizedX, normalizedY), 
-            this.camera
-        );
-        
-        const intersectPoint = new THREE.Vector3();
-        this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
-        
-        console.log('Точка пересечения с плоскостью:', intersectPoint);
-        
-        if (!intersectPoint.x && !intersectPoint.y && !intersectPoint.z) {
-            intersectPoint.set(0, 0, -2);
-            console.log('Точка пересечения не найдена, используем позицию по умолчанию');
-        }
-        
-        this.loadModelAtPosition(intersectPoint);
-    }
-    
-    loadModelAtPosition(position) {
-        console.log('Загружаем модель в позиции:', position);
-        
-        const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-        const material = new THREE.MeshStandardMaterial({ 
-            color: 0x00ff00,
-            metalness: 0.5,
-            roughness: 0.5
+    addVisibleObjects() {
+        // Clear existing models
+        this.models.forEach(model => {
+            this.scene.remove(model);
         });
+        this.models = [];
         
-        const model = new THREE.Mesh(geometry, material);
-        model.position.copy(position);
+        // Set of highly visible objects using BasicMaterial (not affected by lighting)
         
-        model.position.y += 0.25;
+        // Large red cube
+        const cubeGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+        const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const cube = new THREE.Mesh(cubeGeo, cubeMat);
+        cube.position.set(0, 0, -2);
+        this.scene.add(cube);
+        this.models.push(cube);
         
-        this.scene.add(model);
-        this.models.push(model);
+        // Blue sphere
+        const sphereGeo = new THREE.SphereGeometry(0.5, 32, 32);
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        sphere.position.set(1, 0, -2);
+        this.scene.add(sphere);
+        this.models.push(sphere);
         
-        console.log('Модель добавлена в сцену:', model);
-        this.message.textContent = 'Модель добавлена';
+        // Green cylinder
+        const cylinderGeo = new THREE.CylinderGeometry(0.3, 0.3, 1, 32);
+        const cylinderMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const cylinder = new THREE.Mesh(cylinderGeo, cylinderMat);
+        cylinder.position.set(-1, 0, -2);
+        this.scene.add(cylinder);
+        this.models.push(cylinder);
         
-        this.loadGLBModel(position);
+        // Yellow cone
+        const coneGeo = new THREE.ConeGeometry(0.4, 1, 32);
+        const coneMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        const cone = new THREE.Mesh(coneGeo, coneMat);
+        cone.position.set(0, 1, -2);
+        this.scene.add(cone);
+        this.models.push(cone);
+        
+        // Simple wireframe to show depth
+        const wireGeo = new THREE.TorusKnotGeometry(0.5, 0.2, 64, 16);
+        const wireMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+        const wireObj = new THREE.Mesh(wireGeo, wireMat);
+        wireObj.position.set(0, -1, -2);
+        this.scene.add(wireObj);
+        this.models.push(wireObj);
+        
+        console.log('Объекты добавлены, их должно быть видно');
+        this.message.textContent = 'Модели добавлены!';
     }
     
-    async loadGLBModel(position) {
-        try {
-            const loader = new THREE.GLTFLoader();
-            loader.load(
-                'models/model.glb',
-                (gltf) => {
-                    console.log('GLB модель успешно загружена:', gltf);
-                    
-                    const model = gltf.scene;
-                    model.position.copy(position);
-                    
-                    model.scale.set(1, 1, 1);
-                    
-                    model.position.y += 0.25;
-                    
-                    this.scene.add(model);
-                    this.models.push(model);
-                    
-                    console.log('GLB модель добавлена в сцену');
-                    this.message.textContent = 'GLB модель добавлена';
-                },
-                (progress) => {
-                    console.log('Загрузка модели:', (progress.loaded / progress.total * 100) + '%');
-                },
-                (error) => {
-                    console.error('Ошибка загрузки GLB модели:', error);
-                    this.message.textContent = 'Ошибка загрузки модели: ' + error.message;
-                }
-            );
-        } catch (error) {
-            console.error('Ошибка при загрузке модели:', error);
-            this.message.textContent = 'Ошибка: ' + error.message;
-        }
+    loadGLTFModel() {
+        const loader = new GLTFLoader();
+        loader.load('models/model.glb', (gltf) => {
+            const model = gltf.scene;
+            model.position.set(0, 0, -2);
+            model.scale.set(0.5, 0.5, 0.5);
+            this.scene.add(model);
+            this.models.push(model);
+            this.message.textContent = 'Модель загружена!';
+            console.log('GLTF модель загружена');
+            
+            // Show controls
+            this.controls.style.display = 'flex';
+        }, 
+        (xhr) => {
+            this.message.textContent = 'Загрузка: ' + Math.floor(xhr.loaded / xhr.total * 100) + '%';
+        },
+        (error) => {
+            console.error('Ошибка загрузки модели:', error);
+            this.message.textContent = 'Ошибка загрузки модели';
+            // Still show basic objects if model fails
+            this.addVisibleObjects();
+        });
     }
     
     animate() {
         requestAnimationFrame(() => this.animate());
         
+        // Rotate models for better visibility
         this.models.forEach(model => {
             model.rotation.y += 0.01;
         });

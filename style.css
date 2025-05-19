@@ -5,6 +5,7 @@ body {
     height: 100vh;
     overflow: hidden;
     background: #000;
+    font-family: Arial, sans-serif;
 }
 
 #video {
@@ -14,6 +15,16 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    z-index: 1;
+}
+
+canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2; /* Above video but below UI */
 }
 
 #loading {
@@ -23,7 +34,12 @@ body {
     transform: translate(-50%, -50%);
     color: white;
     font-size: 24px;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 20px 30px;
+    border-radius: 10px;
     z-index: 1000;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
 }
 
 #message {
@@ -34,10 +50,27 @@ body {
     color: white;
     font-size: 18px;
     text-align: center;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.7);
     padding: 10px 20px;
     border-radius: 20px;
     z-index: 1000;
+    max-width: 80%;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+#info {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 14px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 8px 16px;
+    border-radius: 15px;
+    z-index: 1000;
+    max-width: 80%;
 }
 
 #controls {
@@ -54,14 +87,34 @@ body {
     width: 60px;
     height: 60px;
     cursor: pointer;
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.3);
     border-radius: 50%;
     padding: 10px;
     transition: background 0.3s;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
 }
 
-#controls img:hover {
-    background: rgba(255, 255, 255, 0.4);
+#controls img:active {
+    background: rgba(255, 255, 255, 0.8);
+    transform: scale(0.95);
+}
+
+button {
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+    transition: all 0.2s;
+}
+
+button:active {
+    transform: translateY(2px) translateX(-50%) scale(0.98);
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 }
 
 /* Стили для кнопок под моделью */
