@@ -150,7 +150,7 @@ class WebARApp {
         );
         
         // Создаем текстуры для кнопок
-        const emailTexture = new THREE.TextureLoader().load('assets/email.png');
+        const emailTexture = new THREE.TextureLoader().load('assets/em.png');
         const siteTexture = new THREE.TextureLoader().load('assets/site.png');
         
         // Создаем материалы для кнопок
