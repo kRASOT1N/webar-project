@@ -94,11 +94,12 @@ class WebARApp {
     }
     
     async handleQRCode(data) {
+        // Всегда используем одну и ту же модель
+        data = 'model';
         if (!this.models.has(data)) {
             try {
                 const model = await this.loadModel(data);
                 this.models.set(data, model);
-                
                 // Создаем кнопки под моделью
                 this.createButtons(model);
             } catch (error) {
@@ -106,7 +107,6 @@ class WebARApp {
                 return;
             }
         }
-        
         this.activeModel = this.models.get(data);
         this.controls.style.display = 'flex';
     }
